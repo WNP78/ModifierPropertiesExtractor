@@ -35,7 +35,36 @@ namespace ModifierPropertiesExtractor
 
                 if (isMod)
                 {
+                    StringBuilder s = new StringBuilder();
+                    foreach (var property in type.Properties)
+                    {
+                        string typeName = null;
+                        var propType = property.PropertyType;
+                        if (propType.FullName == "System.Single")
+                        {
+                            typeName = "float";
+                        }
+                        else if (propType.FullName == "System.Double")
+                        {
+                            typeName = "double";
+                        }
+                        else if (propType.FullName == "System.Boolean")
+                        {
+                            typeName = "bool";
+                        }
+                        else
+                        {
+                            continue;
+                        }
+                        s.AppendLine("|" + property.Name + "|" + typeName + "|");
+                    }
+                    if (s.Length == 0) { continue; }
+                    Console.Write("## ");
                     Console.WriteLine(type.Name);
+                    Console.WriteLine("|Name|Type|");
+                    Console.WriteLine("|---|---|");
+                    Console.Write(s);
+                    Console.Write("\n\n");
                 }
             }
 
