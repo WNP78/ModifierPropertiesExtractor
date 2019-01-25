@@ -56,11 +56,22 @@ namespace ModifierPropertiesExtractor
                         {
                             continue;
                         }
-                        s.AppendLine("|" + property.Name + "|" + typeName + "|");
+                        string pname = property.Name;
+                        if (pname.Contains("."))
+                        {
+                            pname = pname.Substring(pname.LastIndexOf('.') + 1);
+                        }
+                        if (pname.StartsWith("_")) { continue; } // relies on style rules being obeyed...
+                        s.AppendLine("|" + pname + "|" + typeName + "|");
                     }
                     if (s.Length == 0) { continue; }
+                    string name = type.Name;
+                    if (name.EndsWith("Script"))
+                    {
+                        name = name.Remove(name.Length - 6);
+                    }
                     Console.Write("## ");
-                    Console.WriteLine(type.Name);
+                    Console.WriteLine(name);
                     Console.WriteLine("|Name|Type|");
                     Console.WriteLine("|---|---|");
                     Console.Write(s);
