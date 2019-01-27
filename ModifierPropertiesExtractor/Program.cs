@@ -18,6 +18,7 @@ namespace ModifierPropertiesExtractor
         };
 
         static ModuleDefinition module;
+        static ModuleDefinition modApi;
         static void Main(string[] args)
         {
             Console.Write("File Path> ");
@@ -28,10 +29,11 @@ namespace ModifierPropertiesExtractor
             }
             module = ModuleDefinition.ReadModule(filePath);
             ((DefaultAssemblyResolver)module.AssemblyResolver).AddSearchDirectory(new FileInfo(filePath).DirectoryName);
-            
+            modApi = module.AssemblyResolver.Resolve(module.AssemblyReferences.First(e => e.Name == "ModApi")).MainModule;
 
 
             Console.WriteLine("Got module: " + module.Name);
+            Console.WriteLine("Got module: " + modApi.Name);
             Console.Write("Action> ");
             string command = Console.ReadLine();
             switch (command)
@@ -112,7 +114,7 @@ namespace ModifierPropertiesExtractor
         {
             Console.Write("Output root dir> ");
             DirectoryInfo rootDir = new DirectoryInfo(Console.ReadLine());
-            foreach (TypeDefinition type in module.Types)
+            foreach (TypeDefinition type in module.Types.Concat(modApi.Types))
             {
                 bool isMod = false;
                 TypeReference t = type.BaseType;
@@ -130,7 +132,9 @@ namespace ModifierPropertiesExtractor
                 {
                     string tname = type.Name;
                     if (tname.EndsWith("Data")) { tname = tname.Remove(tname.Length - 4); }
-                    Console.WriteLine("\n\n# " + tname);
+                    string filePath = rootDir.FullName + "\\" + tname + ".md";
+                    StringBuilder s = new StringBuilder();
+                    bool wrote = false;
                     foreach (FieldDefinition field in type.Fields)
                     {
                         string description = "";
@@ -142,17 +146,21 @@ namespace ModifierPropertiesExtractor
                                 TypeDefinition at = attr.AttributeType.Resolve();
                                 while (at != null)
                                 {
-                                    if (at.BaseType == null) { break; }
-                                    at = at.BaseType.Resolve();
                                     if (at.FullName == "ModApi.Craft.Parts.Attributes.PartModifierPropertyAttribute")
                                     {
                                         isProp = true;
-                                        foreach (var a in attr.Properties.Where(e => e.Name == "Tooltip"))
+                                        foreach (var a in attr.Properties)
                                         {
-                                            description = (string)a.Argument.Value;
+                                            if (a.Name == "Tooltip") { description = (string)a.Argument.Value; }
+                                            if (a.Name == "DesignerOnly" && (bool) a.Argument.Value == true)
+                                            {
+                                                description = "Designer only. " + description;
+                                            }
                                         }
                                         break;
                                     }
+                                    if (at.BaseType == null) { break; }
+                                    at = at.BaseType.Resolve();
                                 }
                             }
                         }
@@ -165,15 +173,24 @@ namespace ModifierPropertiesExtractor
                             {
                                 typeName = field.FieldType.Name;
                             }
-                            Console.Write("|`");
-                            Console.Write(name);
-                            Console.Write("`|`");
-                            Console.Write(typeName);
-                            Console.Write("`|");
-                            Console.Write(description);
-                            Console.WriteLine('|');
+                            s.Append("|`");
+                            s.Append(name);
+                            s.Append("`|`");
+                            s.Append(typeName);
+                            s.Append("`|");
+                            s.Append(description);
+                            s.AppendLine("|");
+                            wrote = true;
                         }
                     }
+                    string tableHead = "|Name|Type|Description|\n|--|--|--|\n";
+                    if (!wrote)
+                    {
+                        s.AppendLine("This Part Modifier type has no XML properties.");
+                        tableHead = "";
+                    }
+                    File.WriteAllText(filePath, "# " + tname + "\n\n" + tableHead + s.ToString());
+                    Console.WriteLine("   - [" + tname + "](/Sr2Xml/" + tname + ")");
                 }
             }
         }
