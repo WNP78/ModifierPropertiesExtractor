@@ -4,6 +4,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
+using System.Xml.Linq;
 
 namespace ModifierPropertiesExtractor
 {
@@ -45,13 +46,16 @@ namespace ModifierPropertiesExtractor
                 case "GetPartModifierOptions":
                     GetPartModifierOptions();
                     break;
+                case "GenPages":
+                    GeneratePages();
+                    break;
                 default:
                     Console.WriteLine("Unknown Command");
                     break;
             }
             Console.Write("Press any key to exit.");
             Console.ReadKey();
-            
+
         }
 
         static void GetModifierScriptProperties()
@@ -112,6 +116,44 @@ namespace ModifierPropertiesExtractor
             }
         }
 
+        static void GeneratePages()
+        {
+            Console.Write("Output root dir> ");
+            DirectoryInfo rootDir = new DirectoryInfo(Console.ReadLine());
+            XDocument Manifest = XDocument.Load(rootDir.FullName + "\\/manifest.xml");
+            XElement ManifestRoot = Manifest.Root;
+            foreach (TypeDefinition modifierType in module.Types.Concat(modApi.Types).Where(IsPartModifierData))
+            {
+                foreach (var field in modifierType.Fields)
+                {
+                    List<PropertyEntry> properties = new List<PropertyEntry>();
+                    foreach (var attr in field.CustomAttributes)
+                    {
+                        if (IsPartModifierProperty(field, out string description, out bool designerOnly))
+                        {
+                            if (designerOnly)
+                            {
+                                description = "Designer only. " + (description ?? "");
+                            }
+                            if (!TypeMap.TryGetValue(field.FieldType.Name, out string type)) { type = field.FieldType.Name; }
+                            properties.Add(new PropertyEntry {
+                                Name = field.Name.TrimStart('_'),
+                                Type = type,
+                                Desc = description ?? ""
+                            });
+                        }
+                    }
+                    string name = modifierType.Name;
+                    if (name.EndsWith("Data"))
+                    {
+                        name = name.Remove(name.Length - 4);
+                    }
+                    GeneratePage(rootDir.FullName + "\\" + name + ".md", name, ManifestRoot, properties);
+                }
+            }
+            Manifest.Save(rootDir.FullName + "\\/manifest.xml");
+        }
+
         static void GetPartModifierOptions()
         {
             Console.Write("Output root dir> ");
@@ -127,37 +169,12 @@ namespace ModifierPropertiesExtractor
                     bool wrote = false;
                     foreach (FieldDefinition field in type.Fields)
                     {
-                        string description = "";
-                        bool isProp = false;
-                        try
+                        if (IsPartModifierProperty(field, out string description, out bool designerOnly))
                         {
-                            foreach (var attr in field.CustomAttributes)
+                            if (designerOnly)
                             {
-                                TypeDefinition at = attr.AttributeType.Resolve();
-                                while (at != null)
-                                {
-                                    if (at.FullName == "ModApi.Craft.Parts.Attributes.PartModifierPropertyAttribute")
-                                    {
-                                        isProp = true;
-                                        foreach (var a in attr.Properties)
-                                        {
-                                            if (a.Name == "Tooltip") { description = (string)a.Argument.Value; }
-                                            if (a.Name == "DesignerOnly" && (bool) a.Argument.Value == true)
-                                            {
-                                                description = "Designer only. " + description;
-                                            }
-                                        }
-                                        break;
-                                    }
-                                    if (at.BaseType == null) { break; }
-                                    at = at.BaseType.Resolve();
-                                }
+                                description = "Designer only. " + (description ?? "");
                             }
-                        }
-                        catch (AssemblyResolutionException) { }
-
-                        if (isProp)
-                        {
                             string name = field.Name.TrimStart('_');
                             if (!TypeMap.TryGetValue(field.FieldType.FullName, out string typeName))
                             {
@@ -198,6 +215,95 @@ namespace ModifierPropertiesExtractor
                 t = t.Resolve().BaseType;
             }
             return false;
+        }
+        static bool IsPartModifierProperty(FieldDefinition field, out string tooltip, out bool designerOnly)
+        {
+            designerOnly = false;
+            tooltip = null;
+            try
+            {
+                foreach (var attr in field.CustomAttributes)
+                {
+                    TypeDefinition at = attr.AttributeType.Resolve();
+                    while (at != null)
+                    {
+                        if (at.FullName == "ModApi.Craft.Parts.Attributes.PartModifierPropertyAttribute")
+                        {
+                            foreach (var a in attr.Properties)
+                            {
+                                if (a.Name == "Tooltip") { tooltip = (string)a.Argument.Value; }
+                                if (a.Name == "DesignerOnly" && (bool)a.Argument.Value == true)
+                                {
+                                    designerOnly = true;
+                                }
+                            }
+                            return true;
+                        }
+                        if (at.BaseType == null) { break; }
+                        at = at.BaseType.Resolve();
+                    }
+                }
+            }
+            catch (AssemblyResolutionException) { }
+            return false;
+        }
+
+        class PropertyEntry
+        {
+            public string Name { get; set; }
+            public string Type { get; set; }
+            public string Desc { get; set; }
+
+        }
+
+        static void GeneratePage(string path, string name, XElement manifest, List<PropertyEntry> properties)
+        {
+            XElement element = manifest.Element(name);
+            if (element == null)
+            {
+                element = new XElement(name);
+                manifest.Add(element);
+            }
+            var overrides = element.Element("Overrides")?.Elements();
+            if (overrides == null) { overrides = new List<XElement>(); }
+            using (var file = File.CreateText(path))
+            {
+                string head = element.GetChildContents("Head");
+                if (string.IsNullOrEmpty(head))
+                {
+                    head = "# " + name + "\n";
+                }
+                file.WriteLine(head);
+
+                file.WriteLine("\n|Name|Type|Description|\n|--|--|--|");
+                foreach (var property in properties)
+                {
+                    var over = overrides.First(e => e.Name == property.Name);
+                    string type = over.GetStringAttribute("type", property.Type);
+                    string desc = over.Value?.Trim();
+                    if (string.IsNullOrEmpty(desc)) { desc = property.Desc; }
+                    desc = desc.Replace("\r\n", "\n").Replace('\n', ' ');
+                    file.WriteLine("|`" + over.Name + "`|`" + type + "`|" + desc + "|");
+                }
+
+                file.Write('\n');
+                string foot = element.GetChildContents("Footer", "");
+                file.WriteLine(foot);
+            }
+        }
+    }
+
+    public static class Extensions
+    {
+        public static string GetChildContents(this XElement element, XName childName, string def = "")
+        {
+            var el = element.Element(childName);
+            return el != null ? el.Value.Trim() : def;
+        }
+        public static string GetStringAttribute(this XElement element, XName name, string def = null)
+        {
+            var a = element.Attribute(name);
+            return a != null ? a.Value : def;
         }
     }
 }
