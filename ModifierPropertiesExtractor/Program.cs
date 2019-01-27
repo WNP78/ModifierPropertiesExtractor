@@ -14,7 +14,8 @@ namespace ModifierPropertiesExtractor
             { "System.Single", "float" },
             { "System.Int32", "int" },
             { "System.Double", "double" },
-            { "System.String", "string" }
+            { "System.String", "string" },
+            { "System.Boolean", "bool" }
         };
 
         static ModuleDefinition module;
@@ -50,6 +51,7 @@ namespace ModifierPropertiesExtractor
             }
             Console.Write("Press any key to exit.");
             Console.ReadKey();
+            
         }
 
         static void GetModifierScriptProperties()
@@ -116,19 +118,7 @@ namespace ModifierPropertiesExtractor
             DirectoryInfo rootDir = new DirectoryInfo(Console.ReadLine());
             foreach (TypeDefinition type in module.Types.Concat(modApi.Types))
             {
-                bool isMod = false;
-                TypeReference t = type.BaseType;
-                while (t != null)
-                {
-                    if (t.FullName.StartsWith("ModApi.Craft.Parts.PartModifierData"))
-                    {
-                        isMod = true;
-                        break;
-                    }
-                    t = t.Resolve().BaseType;
-                }
-
-                if (isMod)
+                if (IsPartModifierData(type))
                 {
                     string tname = type.Name;
                     if (tname.EndsWith("Data")) { tname = tname.Remove(tname.Length - 4); }
@@ -193,6 +183,21 @@ namespace ModifierPropertiesExtractor
                     Console.WriteLine("   - [" + tname + "](/Sr2Xml/" + tname + ")");
                 }
             }
+        }
+
+        static bool IsPartModifierData(TypeDefinition type)
+        {
+            if (type.IsAbstract) { return false; }
+            TypeReference t = type.BaseType;
+            while (t != null)
+            {
+                if (t.FullName.StartsWith("ModApi.Craft.Parts.PartModifierData"))
+                {
+                    return true;
+                }
+                t = t.Resolve().BaseType;
+            }
+            return false;
         }
     }
 }
