@@ -8,7 +8,7 @@ using System.Xml.Linq;
 
 namespace ModifierPropertiesExtractor
 {
-    class Program
+    static class Program
     {
         static Dictionary<string, string> TypeMap = new Dictionary<string, string>
         {
@@ -21,14 +21,25 @@ namespace ModifierPropertiesExtractor
 
         static ModuleDefinition module;
         static ModuleDefinition modApi;
+        static string rootDir;
+        static XDocument _Manifest;
+        static XElement ManifestRoot;
         static void Main(string[] args)
         {
+            Console.Write("Output root dir> ");
+            rootDir = Console.ReadLine().TrimEnd('\\');
+            if (rootDir == "") { rootDir = "E:\\OtherRandomCSProjects\\Sr2Xml"; }
+
+            _Manifest = XDocument.Load(rootDir + "\\manifest.xml");
+            ManifestRoot = _Manifest.Root;
+
             Console.Write("File Path> ");
             string filePath = Console.ReadLine();
             if (string.IsNullOrEmpty(filePath))
             {
                 filePath = "E:\\SR2Debug\\Game\\SimpleRockets2_Data\\Managed\\SimpleRockets2.dll";
             }
+
             module = ModuleDefinition.ReadModule(filePath);
             ((DefaultAssemblyResolver)module.AssemblyResolver).AddSearchDirectory(new FileInfo(filePath).DirectoryName);
             modApi = module.AssemblyResolver.Resolve(module.AssemblyReferences.First(e => e.Name == "ModApi")).MainModule;
@@ -118,15 +129,12 @@ namespace ModifierPropertiesExtractor
 
         static void GeneratePages()
         {
-            Console.Write("Output root dir> ");
-            DirectoryInfo rootDir = new DirectoryInfo(Console.ReadLine());
-            XDocument Manifest = XDocument.Load(rootDir.FullName + "\\/manifest.xml");
-            XElement ManifestRoot = Manifest.Root;
+            Dictionary<string, int> contents = new Dictionary<string, int>();
             foreach (TypeDefinition modifierType in module.Types.Concat(modApi.Types).Where(IsPartModifierData))
             {
+                List<PropertyEntry> properties = new List<PropertyEntry>();
                 foreach (var field in modifierType.Fields)
                 {
-                    List<PropertyEntry> properties = new List<PropertyEntry>();
                     foreach (var attr in field.CustomAttributes)
                     {
                         if (IsPartModifierProperty(field, out string description, out bool designerOnly))
@@ -135,36 +143,36 @@ namespace ModifierPropertiesExtractor
                             {
                                 description = "Designer only. " + (description ?? "");
                             }
-                            if (!TypeMap.TryGetValue(field.FieldType.Name, out string type)) { type = field.FieldType.Name; }
+                            if (!TypeMap.TryGetValue(field.FieldType.FullName, out string type)) { type = field.FieldType.Name; }
                             properties.Add(new PropertyEntry {
                                 Name = field.Name.TrimStart('_'),
                                 Type = type,
                                 Desc = description ?? ""
                             });
+                            break;
                         }
                     }
-                    string name = modifierType.Name;
-                    if (name.EndsWith("Data"))
-                    {
-                        name = name.Remove(name.Length - 4);
-                    }
-                    GeneratePage(rootDir.FullName + "\\" + name + ".md", name, ManifestRoot, properties);
                 }
+                string name = modifierType.Name;
+                if (name.EndsWith("Data"))
+                {
+                    name = name.Remove(name.Length - 4);
+                }
+                GeneratePage(rootDir + "\\" + name + ".md", name, ManifestRoot, properties, contents);
             }
-            Manifest.Save(rootDir.FullName + "\\/manifest.xml");
+            UpdateMainPage(contents);
+            _Manifest.Save(rootDir + "\\/manifest.xml");
         }
 
         static void GetPartModifierOptions()
         {
-            Console.Write("Output root dir> ");
-            DirectoryInfo rootDir = new DirectoryInfo(Console.ReadLine());
             foreach (TypeDefinition type in module.Types.Concat(modApi.Types))
             {
                 if (IsPartModifierData(type))
                 {
                     string tname = type.Name;
                     if (tname.EndsWith("Data")) { tname = tname.Remove(tname.Length - 4); }
-                    string filePath = rootDir.FullName + "\\" + tname + ".md";
+                    string filePath = rootDir + "\\" + tname + ".md";
                     StringBuilder s = new StringBuilder();
                     bool wrote = false;
                     foreach (FieldDefinition field in type.Fields)
@@ -256,7 +264,7 @@ namespace ModifierPropertiesExtractor
 
         }
 
-        static void GeneratePage(string path, string name, XElement manifest, List<PropertyEntry> properties)
+        static void GeneratePage(string path, string name, XElement manifest, List<PropertyEntry> properties, Dictionary<string, int> contents)
         {
             XElement element = manifest.Element(name);
             if (element == null)
@@ -264,8 +272,20 @@ namespace ModifierPropertiesExtractor
                 element = new XElement(name);
                 manifest.Add(element);
             }
-            var overrides = element.Element("Overrides")?.Elements();
-            if (overrides == null) { overrides = new List<XElement>(); }
+            var overrides = element.Element("Overrides");
+            if (overrides == null)
+            {
+                var o = new XElement("Overrides");
+                element.Add(o);
+                overrides = o;
+            }
+            var customs = element.Element("Customs");
+
+            contents.Add(name, 0);
+            foreach (string childPage in element.GetStringAttribute("childPages")?.Split(',') ?? new string[] { })
+            {
+                contents.Add(childPage, 1);
+            }
             using (var file = File.CreateText(path))
             {
                 string head = element.GetChildContents("Head");
@@ -274,21 +294,62 @@ namespace ModifierPropertiesExtractor
                     head = "# " + name + "\n";
                 }
                 file.WriteLine(head);
-
-                file.WriteLine("\n|Name|Type|Description|\n|--|--|--|");
-                foreach (var property in properties)
+                if (properties.Count == 0 && customs == null)
                 {
-                    var over = overrides.First(e => e.Name == property.Name);
-                    string type = over.GetStringAttribute("type", property.Type);
-                    string desc = over.Value?.Trim();
-                    if (string.IsNullOrEmpty(desc)) { desc = property.Desc; }
-                    desc = desc.Replace("\r\n", "\n").Replace('\n', ' ');
-                    file.WriteLine("|`" + over.Name + "`|`" + type + "`|" + desc + "|");
+                    file.WriteLine("This Part Modifier type has no XML properties.");
+                }
+                else
+                {
+                    file.WriteLine("\n|Name|Type|Description|\n|--|--|--|");
+                    foreach (var property in properties)
+                    {
+                        var over = overrides.Element(property.Name);
+                        if (over == null)
+                        {
+                            over = new XElement(property.Name);
+                            overrides.Add(over);
+                        }
+                        string type = over.GetStringAttribute("type", property.Type);
+                        if (TypeMap.ContainsKey(type)) { type = TypeMap[type]; }
+                        string desc = over.Value?.Trim();
+                        if (string.IsNullOrEmpty(desc)) { desc = property.Desc; }
+                        desc = desc.Replace("\r\n", "\n").Replace('\n', ' ');
+                        file.WriteLine("|`" + (over.Name ?? property.Name) + "`|`" + type + "`|" + desc + "|");
+                    }
+                    if (customs != null)
+                    {
+                        foreach (var custom in customs.Elements())
+                        {
+                            file.WriteLine("|`" + custom.Name.LocalName + "`|`" + custom.GetStringAttribute("type", "string") + "`|" + custom.Value.Trim().Replace("\r", "").Replace("\n", "") + "|");
+                        }
+                    }
                 }
 
                 file.Write('\n');
                 string foot = element.GetChildContents("Footer", "");
                 file.WriteLine(foot);
+            }
+        }
+
+        static void UpdateMainPage(Dictionary<string, int> modifiers)
+        {
+            string path = Path.Combine(rootDir, "README.md");
+            XElement over = ManifestRoot.Element("README");
+            if (over == null)
+            {
+                over = new XElement("README");
+                ManifestRoot.Add(over);
+            }
+            using (var file = File.CreateText(path))
+            {
+                string head = over.GetChildContents("Head", "# SR2 XML Guide");
+                file.WriteLine(head + "\n");
+                file.WriteLine("Contents:");
+                foreach (var kv in modifiers)
+                {
+                    for (int i = 0; i < kv.Value; i++) { file.Write("  "); }
+                    file.WriteLine(" - [" + kv.Key + "](/Sr2Xml/" + kv.Key + ")");
+                }
             }
         }
     }
