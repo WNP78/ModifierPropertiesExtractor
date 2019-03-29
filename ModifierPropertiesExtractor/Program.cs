@@ -108,7 +108,8 @@ namespace ModifierPropertiesExtractor
                     {
                         name = name.Remove(name.Length - 6);
                     }
-                    name = "|`" + name + ".Data.";
+                    name = "|`" + name + ".";
+                    if (isModData) { name += "Data."; }
                     foreach (var property in type.Properties)
                     {
                         string typeName = null;
