@@ -75,6 +75,7 @@ namespace ModifierPropertiesExtractor
             foreach (TypeDefinition type in module.Types)
             {
                 bool isMod = false;
+                bool isModData = false;
                 TypeReference t = type.BaseType;
                 while (t != null)
                 {
@@ -86,15 +87,28 @@ namespace ModifierPropertiesExtractor
                     if (t.Scope.Name != module.Name) { break; }
                     t = t.Resolve().BaseType;
                 }
+                if (!isMod)
+                {
+                    while (t != null)
+                    {
+                        if (t.FullName.StartsWith("ModApi.Craft.Parts.PartModifierData"))
+                        {
+                            isModData = true;
+                            break;
+                        }
+                        if (t.Scope.Name != module.Name) { break; }
+                        t = t.Resolve().BaseType;
+                    }
+                }
 
-                if (isMod)
+                if (isMod || isModData)
                 {
                     string name = type.Name;
                     if (name.EndsWith("Script"))
                     {
                         name = name.Remove(name.Length - 6);
                     }
-                    name = "|`" + name + ".";
+                    name = "|`" + name + ".Data.";
                     foreach (var property in type.Properties)
                     {
                         string typeName = null;
