@@ -37,7 +37,7 @@ namespace ModifierPropertiesExtractor
             string filePath = Console.ReadLine();
             if (string.IsNullOrEmpty(filePath))
             {
-                filePath = "E:\\SR2Debug\\Game\\SimpleRockets2_Data\\Managed\\SimpleRockets2.dll";
+                filePath = @"E:\SteamLibrary\steamapps\common\SimpleRockets2\SimpleRockets2_Data\Managed\SimpleRockets2.dll";
             }
 
             module = ModuleDefinition.ReadModule(filePath);
@@ -144,7 +144,7 @@ namespace ModifierPropertiesExtractor
 
         static void GeneratePages()
         {
-            Dictionary<string, int> contents = new Dictionary<string, int>();
+            List<Page> contents = new List<Page>();
             foreach (TypeDefinition modifierType in module.Types.Concat(modApi.Types).Where(IsPartModifierData))
             {
                 List<PropertyEntry> properties = new List<PropertyEntry>();
@@ -279,7 +279,7 @@ namespace ModifierPropertiesExtractor
 
         }
 
-        static void GeneratePage(string path, string name, XElement manifest, List<PropertyEntry> properties, Dictionary<string, int> contents)
+        static void GeneratePage(string path, string name, XElement manifest, List<PropertyEntry> properties, List<Page> contents)
         {
             XElement element = manifest.Element(name);
             if (element == null)
@@ -296,11 +296,10 @@ namespace ModifierPropertiesExtractor
             }
             var customs = element.Element("Customs");
 
-            contents.Add(name, 0);
-            foreach (string childPage in element.GetStringAttribute("childPages")?.Split(',') ?? new string[] { })
-            {
-                contents.Add(childPage, 1);
-            }
+            contents.Add(new Page() {
+                name = name,
+                children = element.GetStringAttribute("childPages")?.Split(',') ?? new string[] { }
+            });
             using (var file = File.CreateText(path))
             {
                 string head = element.GetChildContents("Head");
@@ -346,7 +345,7 @@ namespace ModifierPropertiesExtractor
             }
         }
 
-        static void UpdateMainPage(Dictionary<string, int> modifiers)
+        static void UpdateMainPage(List<Page> modifiers)
         {
             string path = Path.Combine(rootDir, "README.md");
             XElement over = ManifestRoot.Element("README");
@@ -360,10 +359,13 @@ namespace ModifierPropertiesExtractor
                 string head = over.GetChildContents("Head", "# SR2 XML Guide");
                 file.WriteLine(head + "\n");
                 file.WriteLine("Contents:");
-                foreach (var kv in modifiers)
+                foreach (var page in modifiers.OrderBy(p => p.name))
                 {
-                    for (int i = 0; i < kv.Value; i++) { file.Write("  "); }
-                    file.WriteLine(" - [" + kv.Key + "](/Sr2Xml/" + kv.Key + ")");
+                    file.WriteLine(" - [" + page.name + "](/Sr2Xml/" + page.name + ")");
+                    foreach (var p in page.children)
+                    {
+                        file.WriteLine("   - [" + p + "](/Sr2Xml/" + p + ")");
+                    }
                 }
             }
         }
@@ -381,5 +383,10 @@ namespace ModifierPropertiesExtractor
             var a = element.Attribute(name);
             return a != null ? a.Value : def;
         }
+    }
+    struct Page
+    {
+        public string name;
+        public string[] children;
     }
 }
