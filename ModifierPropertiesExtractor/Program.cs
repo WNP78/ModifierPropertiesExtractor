@@ -52,7 +52,9 @@ namespace ModifierPropertiesExtractor
             switch (command)
             {
                 case "GetModifierScriptProperties":
-                    GetModifierScriptProperties();
+                    var w = new StreamWriter(Console.OpenStandardOutput());
+                    GetModifierScriptProperties(w);
+                    w.Close();
                     break;
                 case "GetPartModifierOptions":
                     GetPartModifierOptions();
@@ -69,9 +71,9 @@ namespace ModifierPropertiesExtractor
 
         }
 
-        static void GetModifierScriptProperties()
+        static void GetModifierScriptProperties(StreamWriter stream)
         {
-            Console.WriteLine("|Name|Type|\n|--|--|");
+            stream.WriteLine("|Name|Type|\n|--|--|");
             foreach (TypeDefinition type in module.Types)
             {
                 bool isMod = false;
@@ -136,7 +138,7 @@ namespace ModifierPropertiesExtractor
                             pname = pname.Substring(pname.LastIndexOf('.') + 1);
                         }
                         if (pname.StartsWith("_")) { continue; } // relies on style rules being obeyed...
-                        Console.WriteLine(name + pname + "`|" + typeName + "|");
+                        stream.WriteLine(name + pname + "`|" + typeName + "|");
                     }
                 }
             }
@@ -175,6 +177,7 @@ namespace ModifierPropertiesExtractor
                 }
                 GeneratePage(rootDir + "\\" + name + ".md", name, ManifestRoot, properties, contents);
             }
+            UpdatePartModifierPropertiesPage();
             UpdateMainPage(contents);
             _Manifest.Save(rootDir + "\\/manifest.xml");
         }
@@ -367,6 +370,23 @@ namespace ModifierPropertiesExtractor
                         file.WriteLine("   - [" + p + "](/Sr2Xml/" + p + ")");
                     }
                 }
+            }
+        }
+
+        static void UpdatePartModifierPropertiesPage()
+        {
+            string path = Path.Combine(rootDir, "PartModifierScriptProperties.md");
+            XElement over = ManifestRoot.Element("PartModifierScriptProperties");
+            if (over == null)
+            {
+                over = new XElement("PartModifierScriptProperties");
+                ManifestRoot.Add(over);
+            }
+            using (var file = File.CreateText(path))
+            {
+                file.WriteLine(over.GetChildContents("Head"));
+                GetModifierScriptProperties(file);
+                file.Write(over.GetChildContents("Footer"));
             }
         }
     }
