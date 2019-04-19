@@ -385,6 +385,7 @@ namespace ModifierPropertiesExtractor
             using (var file = File.CreateText(path))
             {
                 file.WriteLine(over.GetChildContents("Head"));
+                file.WriteLine("");
                 GetModifierScriptProperties(file);
                 file.Write(over.GetChildContents("Footer"));
             }
