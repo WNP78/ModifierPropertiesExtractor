@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Collections.Generic;
 using System.Xml.Linq;
+using Mono.Cecil.Cil;
 
 namespace ModifierPropertiesExtractor
 {
@@ -177,8 +178,39 @@ namespace ModifierPropertiesExtractor
                 }
                 GeneratePage(rootDir + "\\" + name + ".md", name, ManifestRoot, properties, contents);
             }
+
+            var Game = module.GetType("Assets.Scripts.Game");
+            string version = null;
+            var cctor = Game?.Methods.First(m => m.Name == ".cctor");
+            if (cctor != null)
+            {
+                List<int> versionQueue = new List<int>();
+                foreach (var i in cctor.Body.Instructions)
+                {
+                    if (i.OpCode == OpCodes.Newobj && (i.Operand as MethodReference).DeclaringType.Name == "Version")
+                    {
+                        if (versionQueue.Count > 3)
+                        {
+                            version = (string.Join(".", versionQueue.GetRange(versionQueue.Count - 4, 4)));
+                        }
+                        break;
+                    }
+                    if (!i.OpCode.Code.ToString().StartsWith("Ldc_I4")) { continue; }
+                    if (i.OpCode == OpCodes.Ldc_I4)
+                    {
+                        versionQueue.Add((int)i.Operand);
+                    }
+                    else
+                    {
+                        versionQueue.Add(int.Parse(i.OpCode.Code.ToString().Split('_').Last()));
+                    }
+                }
+                
+            }
+            
+
             UpdatePartModifierPropertiesPage();
-            UpdateMainPage(contents);
+            UpdateMainPage(contents, version);
             _Manifest.Save(rootDir + "\\/manifest.xml");
         }
 
@@ -348,7 +380,7 @@ namespace ModifierPropertiesExtractor
             }
         }
 
-        static void UpdateMainPage(List<Page> modifiers)
+        static void UpdateMainPage(List<Page> modifiers, string version)
         {
             string path = Path.Combine(rootDir, "README.md");
             XElement over = ManifestRoot.Element("README");
@@ -361,6 +393,7 @@ namespace ModifierPropertiesExtractor
             {
                 string head = over.GetChildContents("Head", "# SR2 XML Guide");
                 file.WriteLine(head + "\n");
+                file.WriteLine("Game Version: `" + (version ?? "unknown") + "`");
                 file.WriteLine("Contents:");
                 foreach (var page in modifiers.OrderBy(p => p.name))
                 {
