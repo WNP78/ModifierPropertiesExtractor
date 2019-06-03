@@ -341,6 +341,7 @@ namespace ModifierPropertiesExtractor
             });
             using (var file = File.CreateText(path))
             {
+                file.WriteLine("[Home](https://wnp78.github.io/Sr2Xml/)\n");
                 string head = element.GetChildContents("Head");
                 if (string.IsNullOrEmpty(head))
                 {
@@ -421,6 +422,7 @@ namespace ModifierPropertiesExtractor
             }
             using (var file = File.CreateText(path))
             {
+                file.WriteLine("[Home](https://wnp78.github.io/Sr2Xml/)\n");
                 file.WriteLine(over.GetChildContents("Head"));
                 file.WriteLine("");
                 GetModifierScriptProperties(file);
