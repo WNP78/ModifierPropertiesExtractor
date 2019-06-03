@@ -111,6 +111,10 @@ namespace ModifierPropertiesExtractor
                     {
                         name = name.Remove(name.Length - 6);
                     }
+                    else if (isModData && name.EndsWith("Data"))
+                    {
+                        name = name.Remove(name.Length - 4);
+                    }
                     name = "|`" + name + ".";
                     if (isModData) { name += "Data."; }
                     foreach (var property in type.Properties)
@@ -393,7 +397,7 @@ namespace ModifierPropertiesExtractor
             {
                 string head = over.GetChildContents("Head", "# SR2 XML Guide");
                 file.WriteLine(head + "\n");
-                file.WriteLine("Game Version: `" + (version ?? "unknown") + "`");
+                file.WriteLine("Game Version: `" + (version ?? "unknown") + "`\n");
                 file.WriteLine("Contents:");
                 foreach (var page in modifiers.OrderBy(p => p.name))
                 {
