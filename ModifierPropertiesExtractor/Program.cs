@@ -115,7 +115,7 @@ namespace ModifierPropertiesExtractor
                     {
                         name = name.Remove(name.Length - 4);
                     }
-                    name = "|`" + name + ".";
+                    name = name + ".";
                     if (isModData) { name += "Data."; }
                     foreach (var property in type.Properties)
                     {
@@ -143,7 +143,7 @@ namespace ModifierPropertiesExtractor
                             pname = pname.Substring(pname.LastIndexOf('.') + 1);
                         }
                         if (pname.StartsWith("_")) { continue; } // relies on style rules being obeyed...
-                        stream.WriteLine(name + pname + "`|" + typeName + "|");
+                        stream.WriteLine("|`" + (name + pname).Replace("|", "\\|") + "`|" + typeName.Replace("|", "\\|") + "|");
                     }
                 }
             }
@@ -204,6 +204,10 @@ namespace ModifierPropertiesExtractor
                     {
                         versionQueue.Add((int)i.Operand);
                     }
+                    else if (i.OpCode == OpCodes.Ldc_I4_S)
+                    {
+                        versionQueue.Add(((IConvertible)i.Operand).ToInt32(System.Globalization.CultureInfo.InvariantCulture));
+                    }
                     else
                     {
                         versionQueue.Add(int.Parse(i.OpCode.Code.ToString().Split('_').Last()));
@@ -243,11 +247,11 @@ namespace ModifierPropertiesExtractor
                                 typeName = field.FieldType.Name;
                             }
                             s.Append("|`");
-                            s.Append(name);
+                            s.Append(name.Replace("|", "\\|"));
                             s.Append("`|`");
-                            s.Append(typeName);
+                            s.Append(typeName.Replace("|", "\\|"));
                             s.Append("`|");
-                            s.Append(description);
+                            s.Append(description.Replace("|", "\\|"));
                             s.AppendLine("|");
                             wrote = true;
                         }
@@ -368,7 +372,7 @@ namespace ModifierPropertiesExtractor
                         string desc = over.Value?.Trim();
                         if (string.IsNullOrEmpty(desc)) { desc = property.Desc; }
                         desc = desc.Replace("\r\n", "\n").Replace('\n', ' ');
-                        file.WriteLine("|`" + (over.Name ?? property.Name) + "`|`" + type + "`|" + desc + "|");
+                        file.WriteLine("|`" + (over.Name.LocalName ?? property.Name).Replace("|", "\\|") + "`|`" + type.Replace("|", "\\|") + "`|" + desc.Replace("|", "\\|") + "|");
                     }
                     if (customs != null)
                     {
