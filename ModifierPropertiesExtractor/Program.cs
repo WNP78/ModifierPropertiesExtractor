@@ -17,7 +17,8 @@ namespace ModifierPropertiesExtractor
             { "System.Int32", "int" },
             { "System.Double", "double" },
             { "System.String", "string" },
-            { "System.Boolean", "bool" }
+            { "System.Boolean", "bool" },
+            { "UnityEngine.Vector3d", "vector" },
         };
 
         static ModuleDefinition module;
@@ -29,7 +30,7 @@ namespace ModifierPropertiesExtractor
         {
             Console.Write("Output root dir> ");
             rootDir = Console.ReadLine().TrimEnd('\\');
-            if (rootDir == "") { rootDir = "E:\\OtherRandomCSProjects\\Sr2Xml"; }
+            if (rootDir == "") { rootDir = "D:\\OtherRandomCSProjects\\Sr2Xml"; }
 
             _Manifest = XDocument.Load(rootDir + "\\manifest.xml");
             ManifestRoot = _Manifest.Root;
@@ -38,7 +39,7 @@ namespace ModifierPropertiesExtractor
             string filePath = Console.ReadLine();
             if (string.IsNullOrEmpty(filePath))
             {
-                filePath = @"E:\SteamLibrary\steamapps\common\SimpleRockets2\SimpleRockets2_Data\Managed\SimpleRockets2.dll";
+                filePath = @"C:\Program Files (x86)\Steam\steamapps\common\SimpleRockets2\SimpleRockets2_Data\Managed\SimpleRockets2.dll";
             }
 
             module = ModuleDefinition.ReadModule(filePath);
@@ -63,6 +64,12 @@ namespace ModifierPropertiesExtractor
                 case "GenPages":
                     GeneratePages();
                     break;
+                case "GetControls":
+                    using (var s = new StreamWriter(Console.OpenStandardOutput()))
+                    {
+                        GetControls(s);
+                    }
+                    break;
                 default:
                     Console.WriteLine("Unknown Command");
                     break;
@@ -70,6 +77,57 @@ namespace ModifierPropertiesExtractor
             Console.Write("Press any key to exit.");
             Console.ReadKey();
 
+        }
+
+        private static void GetControls(StreamWriter stream)
+        {
+            var controls = modApi.GetType("ModApi.Craft.CraftControls");
+
+            if (controls == null)
+            {
+                stream.WriteLine("Error: could not find ModApi.Craft.CraftControls");
+            }
+            else
+            {
+                stream.WriteLine("|Controls|");
+                stream.WriteLine("|---|");
+                foreach (PropertyDefinition property in controls.Properties)
+                {
+                    var name = property.PropertyType.Name;
+                    if (name == "Single" || name == "Double" || name == "Boolean")
+                    {
+                        stream.Write("|`");
+                        stream.Write(property.Name);
+                        stream.WriteLine("`|");
+                    }
+                }
+
+                stream.WriteLine();
+                stream.WriteLine();
+            }
+
+            var flightData = module.GetType("Assets.Scripts.Craft.FlightData.CraftFlightData");
+
+            if (flightData == null)
+            {
+                stream.WriteLine("Error: could not find CraftFlightData");
+            }
+            else
+            {
+                stream.WriteLine("|Flight Data|Type|");
+                stream.WriteLine("|---|---|");
+                foreach (PropertyDefinition property in flightData.Properties)
+                {
+                    if (TypeMap.TryGetValue(property.PropertyType.FullName, out string typeName))
+                    {
+                        stream.Write("|`FlightData.");
+                        stream.Write(property.Name);
+                        stream.Write("`|`");
+                        stream.Write(typeName);
+                        stream.WriteLine("`|");
+                    }
+                }
+            }
         }
 
         static void GetModifierScriptProperties(StreamWriter stream)
@@ -385,7 +443,18 @@ namespace ModifierPropertiesExtractor
 
                 file.Write('\n');
                 string foot = element.GetChildContents("Footer", "");
-                file.WriteLine(foot);
+                const string flagword = "{{INPUTS}}";
+                int index = foot.IndexOf(flagword);
+                if (index != -1)
+                {
+                    file.Write(foot.Substring(0, index));
+                    GetControls(file);
+                    file.Write(foot.Substring(index + flagword.Length));
+                }
+                else
+                {
+                    file.WriteLine(foot);
+                }
             }
         }
 
