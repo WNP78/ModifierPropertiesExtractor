@@ -39,7 +39,7 @@ namespace ModifierPropertiesExtractor
             string filePath = Console.ReadLine();
             if (string.IsNullOrEmpty(filePath))
             {
-                filePath = @"C:\Program Files (x86)\Steam\steamapps\common\SimpleRockets2\SimpleRockets2_Data\Managed\SimpleRockets2.dll";
+                filePath = @"E:\SteamLibrary\steamapps\common\SimpleRockets2\SimpleRockets2_Data\Managed\SimpleRockets2.dll";
             }
 
             module = ModuleDefinition.ReadModule(filePath);
@@ -106,25 +106,32 @@ namespace ModifierPropertiesExtractor
                 stream.WriteLine();
             }
 
-            var flightData = module.GetType("Assets.Scripts.Craft.FlightData.CraftFlightData");
+            ExtractDataClass("Assets.Scripts.Craft.FlightData.CraftFlightData", "FlightData", "Flight Data");
+            stream.WriteLine();
+            ExtractDataClass("Assets.Scripts.Craft.FlightData.CraftOrbitData", "OrbitData", "Orbit Data");
 
-            if (flightData == null)
+            void ExtractDataClass(string klass, string prefix, string title)
             {
-                stream.WriteLine("Error: could not find CraftFlightData");
-            }
-            else
-            {
-                stream.WriteLine("|Flight Data|Type|");
-                stream.WriteLine("|---|---|");
-                foreach (PropertyDefinition property in flightData.Properties)
+                var type = module.GetType(klass);
+
+                if (type == null)
                 {
-                    if (TypeMap.TryGetValue(property.PropertyType.FullName, out string typeName))
+                    stream.WriteLine("Error: could not find " + prefix);
+                }
+                else
+                {
+                    stream.WriteLine($"|{title}|Type|");
+                    stream.WriteLine("|---|---|");
+                    foreach (PropertyDefinition property in type.Properties)
                     {
-                        stream.Write("|`FlightData.");
-                        stream.Write(property.Name);
-                        stream.Write("`|`");
-                        stream.Write(typeName);
-                        stream.WriteLine("`|");
+                        if (TypeMap.TryGetValue(property.PropertyType.FullName, out string typeName))
+                        {
+                            stream.Write($"|`{prefix}.");
+                            stream.Write(property.Name);
+                            stream.Write("`|`");
+                            stream.Write(typeName);
+                            stream.WriteLine("`|");
+                        }
                     }
                 }
             }
